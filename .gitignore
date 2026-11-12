@@ -1,3 +1,7 @@
-node_modules/
-dist/
-.env
+__pycache__/
+*.pyc
+.venv/
+# dati preparati e modelli addestrati (pesanti, non vanno su git)
+out/
+*.bin
+*.pt

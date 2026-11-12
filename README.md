@@ -1,102 +1,130 @@
 # Ticly AI (nome provvisorio)
 
-Assistente AI generalista di Ticly, la "Gemini" di Ticly: risponde a domande di ogni tipo
-e **cerca sul web** (ricerca + lettura di pagine) per dare risposte aggiornate con le fonti.
+L'assistente generale di Ticly: risponde alle domande e cerca informazioni sul web.
+È un modello linguistico **costruito da zero** (nessuna API di terzi): qui dentro ci sono
+il tokenizer, la rete neurale, gli script per addestrarla e quelli per usarla.
+Vextor resta l'AI per il codice.
 
-Vextor resta l'AI per il codice; questo progetto è l'assistente generale.
+Il modello non è ancora addestrato: questo repository è tutto ciò che serve per farlo.
 
-- Modello: Claude Opus 5.5 (Anthropic) con i tool lato server `web_search` e `web_fetch`
-- Solo API HTTP (Node + TypeScript), con risposta normale o in streaming (SSE)
-- Il nome si cambia con la variabile `ASSISTANT_NAME`, senza toccare il codice
+## Com'è fatto
 
-## Avvio
-
-```bash
-npm install
-cp .env.example .env   # poi inserisci ANTHROPIC_API_KEY e TICLY_API_KEY
-npm run dev            # sviluppo (riavvio automatico)
-# oppure
-npm run build && npm start
-```
-
-## Variabili d'ambiente
-
-| Variabile | Default | Descrizione |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | — | Chiave API Anthropic (obbligatoria) |
-| `ASSISTANT_NAME` | `Ticly AI` | Nome dell'assistente |
-| `PORT` | `3000` | Porta HTTP |
-| `TICLY_API_KEY` | vuota | Se impostata, i client devono inviare `Authorization: Bearer <chiave>` |
-| `EFFORT` | `medium` | Profondità di ragionamento: `low`, `medium`, `high`, `xhigh`, `max` |
-| `MAX_SEARCHES` | `5` | Ricerche web massime per risposta |
-| `MAX_FETCHES` | `5` | Pagine web lette al massimo per risposta |
-
-## API
-
-### `GET /health`
-
-```json
-{ "status": "ok", "name": "Ticly AI", "model": "claude-opus-5-5" }
-```
-
-### `POST /v1/chat`
-
-L'API è senza stato: per una conversazione il client rimanda tutta la cronologia.
-
-Domanda singola:
-
-```bash
-curl -X POST http://localhost:3000/v1/chat \
-  -H "Authorization: Bearer $TICLY_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Quali sono le ultime novità sull'\''intelligenza artificiale?"}'
-```
-
-Conversazione:
-
-```json
-{
-  "messages": [
-    { "role": "user", "content": "Chi ha vinto l'ultimo Giro d'Italia?" },
-    { "role": "assistant", "content": "..." },
-    { "role": "user", "content": "E l'anno prima?" }
-  ]
-}
-```
-
-Risposta:
-
-```json
-{
-  "answer": "Testo della risposta in Markdown...",
-  "sources": [{ "url": "https://...", "title": "..." }],
-  "stopReason": "end_turn",
-  "model": "claude-opus-5-5",
-  "usage": { "inputTokens": 1234, "outputTokens": 456, "webSearches": 2 }
-}
-```
-
-### Streaming
-
-Aggiungi `"stream": true` al body. La risposta è `text/event-stream` con questi eventi:
-
-| Evento | Dati |
+| File | Cosa fa |
 |---|---|
-| `search` | `{ "query": "..." }` — l'assistente sta cercando sul web |
-| `fetch` | `{ "url": "..." }` — l'assistente sta leggendo una pagina |
-| `source` | `{ "source": { "url", "title" } }` — nuova fonte trovata |
-| `text` | `{ "text": "..." }` — pezzo di risposta |
-| `done` | stesso oggetto della risposta non in streaming |
-| `error` | `{ "status", "message" }` |
+| `ticly_ai/tokenizer.py` | Tokenizer BPE a livello di byte: trasforma il testo in numeri |
+| `ticly_ai/model.py` | Il modello: transformer decoder stile GPT (RoPE, RMSNorm, cache in generazione) |
+| `ticly_ai/chat_format.py` | Formato delle conversazioni (`<|user|>`, `<|assistant|>`, `<|context|>`) |
+| `ticly_ai/search.py` | Ricerca web (DuckDuckGo) e lettura del testo delle pagine |
+| `ticly_ai/assistant.py` | Mette insieme modello, tokenizer e ricerca |
+| `train_tokenizer.py`, `prepare_data.py`, `train.py` | I tre passi dell'addestramento |
+| `chat.py`, `server.py` | Uso da terminale e API HTTP |
+
+## Installazione
 
 ```bash
-curl -N -X POST http://localhost:3000/v1/chat \
-  -H "Authorization: Bearer $TICLY_API_KEY" \
-  -d '{"message": "Che tempo fa domani a Roma?", "stream": true}'
+pip install -r requirements.txt
 ```
 
-## Struttura
+Per addestrare sul serio serve una GPU NVIDIA; su CPU funziona solo la taglia `tiny` di prova.
 
-- `src/config.ts` — configurazione (nome, modello, limiti)
-- `src/assistant.ts` — logica dell'assistente: prompt di sistema, ricerca web, fonti
-- `src/server.ts` — server HTTP, validazione, autenticazione, streaming SSE
+## Addestramento
+
+L'addestramento ha due fasi: prima il modello impara la lingua da tanto testo
+(pre-addestramento), poi impara a fare l'assistente da conversazioni di esempio (fine-tuning).
+
+```bash
+# 1. Vocabolario
+python train_tokenizer.py --input dati/*.txt dati/chat.jsonl --vocab-size 16000
+
+# 2. Dati -> token
+python prepare_data.py --text dati/*.txt --out out/pretrain
+python prepare_data.py --chat dati/chat.jsonl --out out/chat
+
+# 3a. Pre-addestramento da zero
+python train.py --data out/pretrain --out out/pretrain-model --preset small --steps 100000 --compile
+
+# 3b. Fine-tuning sulle conversazioni
+python train.py --data out/chat --out out/chat-model \
+    --init-from out/pretrain-model/best.pt --steps 5000 --lr 1e-4
+```
+
+Un addestramento interrotto (anche con Ctrl+C) si riprende aggiungendo `--resume`.
+Se la GPU ha poca memoria, abbassa `--batch-size` e alza `--grad-accum`.
+
+### Taglie del modello (`--preset`)
+
+| Preset | Parametri | Contesto | Per cosa |
+|---|---|---|---|
+| `tiny` | ~3M | 256 token | Provare che tutto funzioni, anche su CPU |
+| `small` | ~33M | 1024 | Una GPU consumer |
+| `base` | ~97M | 2048 | Una GPU seria e molti dati (taglia GPT-2 small) |
+| `large` | ~318M | 2048 | Più GPU o giorni di calcolo (taglia GPT-2 medium) |
+
+### Dati
+
+- **Testo libero** (`.txt`): più ce n'è, meglio è. Servono almeno centinaia di MB
+  di testo di buona qualità perché il modello scriva frasi sensate.
+- **Conversazioni** (`.jsonl`, una per riga):
+
+  ```json
+  {"messages": [{"role": "user", "content": "Ciao"}, {"role": "assistant", "content": "Ciao! Come posso aiutarti?"}]}
+  ```
+
+- **Ricerca web**: per insegnare al modello a rispondere usando le pagine trovate,
+  una parte delle conversazioni deve avere, prima della domanda, un messaggio con
+  `"role": "context"` che contiene i risultati nello stesso formato usato in
+  produzione (vedi `data/esempio/chat.jsonl`). Senza questi esempi il modello
+  riceve le pagine ma non sa cosa farne.
+
+### Prova veloce
+
+Con i dati minuscoli in `data/esempio` (pochi minuti su CPU, il modello li impara a memoria):
+
+```bash
+python train_tokenizer.py --input data/esempio/*.txt data/esempio/chat.jsonl --vocab-size 600
+python prepare_data.py --text data/esempio/testo.txt --chat data/esempio/chat.jsonl --out out/demo --val-fraction 0.15
+python train.py --data out/demo --out out/demo-model --preset tiny --steps 300 --batch-size 16 --lr 1e-3 --warmup 20 --eval-every 100
+python chat.py --model out/demo-model/last.pt --no-web
+```
+
+## Uso
+
+Dal terminale:
+
+```bash
+python chat.py --model out/chat-model/best.pt
+```
+
+Come API:
+
+```bash
+TICLY_API_KEY=una-chiave-segreta python server.py --model out/chat-model/best.pt --port 3000
+
+curl -X POST http://localhost:3000/v1/chat \
+  -H "Authorization: Bearer una-chiave-segreta" \
+  -d '{"message": "Quanto è alto il Monte Bianco?"}'
+```
+
+Risposta: `{"answer": "...", "sources": [{"title": "...", "url": "..."}]}`
+
+Campi della richiesta:
+
+| Campo | Default | Descrizione |
+|---|---|---|
+| `message` / `messages` | — | Domanda singola, oppure tutta la conversazione (l'API non la salva) |
+| `web` | `true` | Cerca sul web prima di rispondere |
+| `stream` | `false` | Risposta a pezzi (eventi `sources`, `text`, `done`, `error`) |
+| `temperature` | `0.7` | 0 = sempre la risposta più probabile, più alto = più varia |
+| `max_tokens` | `512` | Lunghezza massima della risposta |
+
+Il nome dell'assistente si cambia con la variabile d'ambiente `ASSISTANT_NAME`.
+
+## Limiti da conoscere
+
+- La qualità dipende quasi solo da **quanti dati e quanto calcolo** si usano. Un modello
+  `small` o `base` addestrato così scrive in modo scorrevole e risponde su ciò che ha
+  visto, ma resta molto lontano da Gemini o ChatGPT, che hanno migliaia di volte più
+  parametri e dati.
+- La ricerca usa come query l'ultima domanda dell'utente e la pagina HTML di DuckDuckGo,
+  che può cambiare o limitare le richieste: per un uso serio conviene un'API di ricerca.
+- Il server genera una risposta alla volta.
