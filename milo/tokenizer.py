@@ -12,9 +12,10 @@ ID dei token:
 
 from __future__ import annotations
 
+import heapq
 import json
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 
 # Token speciali: non vengono mai prodotti dal testo normale, solo dal formato chat.
 SPECIAL_TOKENS = ["<|bos|>", "<|end|>", "<|user|>", "<|assistant|>", "<|context|>"]
@@ -76,28 +77,50 @@ class Tokenizer:
                     chunk_counts.update(_CHUNK_RE.findall(part))
 
         # Ogni pezzo distinto viene tenuto una volta sola, con la sua frequenza.
-        words = [(tuple(c.encode("utf-8")), n) for c, n in chunk_counts.items()]
-        merges: list[tuple[int, int]] = []
+        words = [list(c.encode("utf-8")) for c in chunk_counts]
+        freqs = list(chunk_counts.values())
 
-        for step in range(num_merges):
-            pairs: Counter[tuple[int, int]] = Counter()
-            for ids, n in words:
-                for pair in zip(ids, ids[1:]):
-                    pairs[pair] += n
-            if not pairs:
-                break
-            best = max(pairs, key=lambda p: (pairs[p], p))
-            if pairs[best] < 2:
+        # Conteggio di ogni coppia e, per ogni coppia, in quali pezzi compare:
+        # a ogni fusione si aggiornano solo i pezzi toccati.
+        pairs: dict[tuple[int, int], int] = defaultdict(int)
+        where: dict[tuple[int, int], set[int]] = defaultdict(set)
+        for w, ids in enumerate(words):
+            for pair in zip(ids, ids[1:]):
+                pairs[pair] += freqs[w]
+                where[pair].add(w)
+        heap = [(-n, pair) for pair, n in pairs.items()]
+        heapq.heapify(heap)
+
+        merges: list[tuple[int, int]] = []
+        while len(merges) < num_merges and heap:
+            neg, best = heapq.heappop(heap)
+            if pairs.get(best, 0) != -neg:
+                continue  # voce vecchia: il conteggio nel frattempo è cambiato
+            if -neg < 2:
                 break
             new_id = 256 + len(merges)
             merges.append(best)
-            a, b = best
-            words = [
-                (_merge(ids, best, new_id), n) if a in ids and b in ids else (ids, n)
-                for ids, n in words
-            ]
-            if verbose and (step + 1) % 500 == 0:
-                print(f"  fusione {step + 1}/{num_merges}")
+
+            changed: set[tuple[int, int]] = set()
+            for w in where.pop(best, ()):
+                ids, n = words[w], freqs[w]
+                for pair in zip(ids, ids[1:]):
+                    pairs[pair] -= n
+                    changed.add(pair)
+                ids = words[w] = list(_merge(tuple(ids), best, new_id))
+                for pair in zip(ids, ids[1:]):
+                    pairs[pair] += n
+                    where[pair].add(w)
+                    changed.add(pair)
+            pairs.pop(best, None)
+            for pair in changed:
+                n = pairs.get(pair, 0)
+                if n > 0:
+                    heapq.heappush(heap, (-n, pair))
+                else:
+                    pairs.pop(pair, None)
+            if verbose and len(merges) % 1000 == 0:
+                print(f"  fusione {len(merges)}/{num_merges}", flush=True)
 
         return cls(merges)
 

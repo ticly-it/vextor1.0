@@ -16,7 +16,9 @@ Il modello non è ancora addestrato: questo repository è tutto ciò che serve p
 | `milo/chat_format.py` | Formato delle conversazioni (`<|user|>`, `<|assistant|>`, `<|context|>`) |
 | `milo/search.py` | Ricerca web (DuckDuckGo) e lettura del testo delle pagine |
 | `milo/assistant.py` | Mette insieme modello, tokenizer e ricerca |
+| `download_data.py` | Scarica i dati di addestramento |
 | `train_tokenizer.py`, `prepare_data.py`, `train.py` | I tre passi dell'addestramento |
+| `notebooks/addestra_milo.ipynb` | Tutto l'addestramento, pronto per Colab e Kaggle |
 | `chat.py`, `server.py` | Uso da terminale e API HTTP |
 
 ## Installazione
@@ -27,7 +29,19 @@ pip install -r requirements.txt
 
 Per addestrare sul serio serve una GPU NVIDIA; su CPU funziona solo la taglia `tiny` di prova.
 
-## Addestramento
+## Addestramento su Colab o Kaggle
+
+Il modo più semplice: apri `notebooks/addestra_milo.ipynb` su
+[Google Colab](https://colab.research.google.com) (*File → Apri notebook → GitHub*) oppure su
+[Kaggle](https://www.kaggle.com/code) (*File → Import notebook*), attiva la GPU ed esegui le celle in ordine.
+Il notebook scarica i dati, addestra Milo 1 e salva il modello (su Google Drive, se usi Colab).
+Se la sessione si interrompe basta rieseguirlo: riprende da dove era arrivato.
+
+I dati li scarica `download_data.py`: testo di Wikipedia in italiano per il pre-addestramento e,
+per il fine-tuning, domande e risposte, risposte basate su una pagina (per la ricerca web)
+e conversazioni sull'identità di Milo 1.
+
+## Addestramento a mano
 
 L'addestramento ha due fasi: prima il modello impara la lingua da tanto testo
 (pre-addestramento), poi impara a fare l'assistente da conversazioni di esempio (fine-tuning).

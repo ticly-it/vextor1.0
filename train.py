@@ -107,8 +107,12 @@ def main():
         progress = min(1.0, (s - args.warmup) / max(1, args.steps - args.warmup))
         return args.lr * (0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * progress)))
 
+    # Precisione mista su GPU: bfloat16 dove supportato, altrimenti float16
+    # (es. le T4 di Colab), che richiede di riscalare i gradienti.
     use_amp = device == "cuda"
-    autocast = lambda: torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_amp)  # noqa: E731
+    amp_dtype = torch.bfloat16 if use_amp and torch.cuda.is_bf16_supported(including_emulation=False) else torch.float16
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp and amp_dtype == torch.float16)
+    autocast = lambda: torch.autocast("cuda", dtype=amp_dtype, enabled=use_amp)  # noqa: E731
     if use_amp:
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
@@ -139,9 +143,11 @@ def main():
                 x, y = get_batch("train")
                 with autocast():
                     loss = run_model(x, y)[1]
-                (loss / args.grad_accum).backward()
+                scaler.scale(loss / args.grad_accum).backward()
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad(set_to_none=True)
             step += 1
 
