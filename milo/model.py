@@ -114,7 +114,7 @@ class Block(nn.Module):
         return x + self.drop(self.mlp(self.norm2(x)))
 
 
-class TiclyLM(nn.Module):
+class Milo(nn.Module):
     def __init__(self, cfg: ModelConfig):
         super().__init__()
         self.cfg = cfg
@@ -220,14 +220,14 @@ class TiclyLM(nn.Module):
             pos += 1
 
 
-def save_checkpoint(path: str, model: TiclyLM, **extra) -> None:
+def save_checkpoint(path: str, model: Milo, **extra) -> None:
     raw = getattr(model, "_orig_mod", model)  # nel caso sia passato da torch.compile
     torch.save({"config": asdict(raw.cfg), "model": raw.state_dict(), **extra}, path)
 
 
-def load_checkpoint(path: str, device: str = "cpu") -> tuple[TiclyLM, dict]:
+def load_checkpoint(path: str, device: str = "cpu") -> tuple[Milo, dict]:
     ckpt = torch.load(path, map_location=device, weights_only=True)
-    model = TiclyLM(ModelConfig(**ckpt["config"]))
+    model = Milo(ModelConfig(**ckpt["config"]))
     model.load_state_dict(ckpt["model"])
     return model.to(device), ckpt
 

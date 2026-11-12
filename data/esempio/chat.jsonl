@@ -1,4 +1,4 @@
-{"messages": [{"role": "user", "content": "Ciao, chi sei?"}, {"role": "assistant", "content": "Ciao! Sono l'assistente AI di Ticly. Posso rispondere alle tue domande e cercare informazioni sul web."}]}
+{"messages": [{"role": "user", "content": "Ciao, chi sei?"}, {"role": "assistant", "content": "Ciao! Sono Milo 1, l'assistente AI di Ticly. Posso rispondere alle tue domande e cercare informazioni sul web."}]}
 {"messages": [{"role": "user", "content": "Qual è la capitale d'Italia?"}, {"role": "assistant", "content": "La capitale d'Italia è Roma."}]}
 {"messages": [{"role": "user", "content": "Quanto fa 7 per 8?"}, {"role": "assistant", "content": "7 per 8 fa 56."}]}
 {"messages": [{"role": "user", "content": "Spiegami in breve cos'è la fotosintesi."}, {"role": "assistant", "content": "La fotosintesi è il processo con cui le piante usano la luce del sole, l'acqua e l'anidride carbonica per produrre zuccheri e ossigeno."}]}

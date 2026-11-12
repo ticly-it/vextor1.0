@@ -20,8 +20,8 @@ import time
 import numpy as np
 import torch
 
-from ticly_ai.model import PRESETS, ModelConfig, TiclyLM, load_checkpoint, pick_device, save_checkpoint
-from ticly_ai.tokenizer import Tokenizer
+from milo.model import PRESETS, ModelConfig, Milo, load_checkpoint, pick_device, save_checkpoint
+from milo.tokenizer import Tokenizer
 
 
 def main():
@@ -63,7 +63,7 @@ def main():
         print(f"Parto dai pesi di {args.init_from}")
     else:
         cfg = ModelConfig(vocab_size=tok.vocab_size, dropout=args.dropout, **PRESETS[args.preset])
-        model = TiclyLM(cfg).to(device)
+        model = Milo(cfg).to(device)
     if model.cfg.vocab_size != tok.vocab_size:
         raise SystemExit("Il tokenizer non corrisponde a quello usato per questo modello")
     cfg = model.cfg

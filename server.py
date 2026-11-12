@@ -8,7 +8,7 @@
     GET  /health
 
 Variabili d'ambiente:
-    ASSISTANT_NAME   nome dell'assistente (default "Ticly AI")
+    ASSISTANT_NAME   nome dell'assistente (default "Milo 1")
     TICLY_API_KEY    se impostata, serve l'header "Authorization: Bearer <chiave>"
 """
 
@@ -18,9 +18,9 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from ticly_ai.assistant import Assistant
+from milo.assistant import Assistant
 
-NAME = os.environ.get("ASSISTANT_NAME", "Ticly AI")
+NAME = os.environ.get("ASSISTANT_NAME", "Milo 1")
 API_KEY = os.environ.get("TICLY_API_KEY", "")
 MAX_BODY = 2_000_000
 MAX_MESSAGES = 100

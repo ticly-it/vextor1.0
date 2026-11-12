@@ -7,7 +7,7 @@
 
 import argparse
 
-from ticly_ai.assistant import Assistant
+from milo.assistant import Assistant
 
 
 def main():

@@ -7,7 +7,7 @@
 import argparse
 import json
 
-from ticly_ai.tokenizer import Tokenizer
+from milo.tokenizer import Tokenizer
 
 
 def read_texts(paths, max_chars):

@@ -1,6 +1,6 @@
-# Ticly AI (nome provvisorio)
+# Milo 1
 
-L'assistente generale di Ticly: risponde alle domande e cerca informazioni sul web.
+Milo 1 è l'assistente generale di Ticly: risponde alle domande e cerca informazioni sul web.
 È un modello linguistico **costruito da zero** (nessuna API di terzi): qui dentro ci sono
 il tokenizer, la rete neurale, gli script per addestrarla e quelli per usarla.
 Vextor resta l'AI per il codice.
@@ -11,11 +11,11 @@ Il modello non è ancora addestrato: questo repository è tutto ciò che serve p
 
 | File | Cosa fa |
 |---|---|
-| `ticly_ai/tokenizer.py` | Tokenizer BPE a livello di byte: trasforma il testo in numeri |
-| `ticly_ai/model.py` | Il modello: transformer decoder stile GPT (RoPE, RMSNorm, cache in generazione) |
-| `ticly_ai/chat_format.py` | Formato delle conversazioni (`<|user|>`, `<|assistant|>`, `<|context|>`) |
-| `ticly_ai/search.py` | Ricerca web (DuckDuckGo) e lettura del testo delle pagine |
-| `ticly_ai/assistant.py` | Mette insieme modello, tokenizer e ricerca |
+| `milo/tokenizer.py` | Tokenizer BPE a livello di byte: trasforma il testo in numeri |
+| `milo/model.py` | Il modello: transformer decoder stile GPT (RoPE, RMSNorm, cache in generazione) |
+| `milo/chat_format.py` | Formato delle conversazioni (`<|user|>`, `<|assistant|>`, `<|context|>`) |
+| `milo/search.py` | Ricerca web (DuckDuckGo) e lettura del testo delle pagine |
+| `milo/assistant.py` | Mette insieme modello, tokenizer e ricerca |
 | `train_tokenizer.py`, `prepare_data.py`, `train.py` | I tre passi dell'addestramento |
 | `chat.py`, `server.py` | Uso da terminale e API HTTP |
 

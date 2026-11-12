@@ -20,8 +20,8 @@ import random
 
 import numpy as np
 
-from ticly_ai.chat_format import encode_conversation
-from ticly_ai.tokenizer import Tokenizer
+from milo.chat_format import encode_conversation
+from milo.tokenizer import Tokenizer
 
 
 def text_documents(paths, tok):

@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
-USER_AGENT = "Mozilla/5.0 (compatible; TiclyAI/0.1)"
+USER_AGENT = "Mozilla/5.0 (compatible; Milo/1.0)"
 _SKIP_TAGS = {"script", "style", "noscript", "nav", "footer", "header", "aside", "form", "svg", "template"}
 _BLOCK_TAGS = {"p", "br", "div", "li", "h1", "h2", "h3", "h4", "tr", "section", "article"}
 
