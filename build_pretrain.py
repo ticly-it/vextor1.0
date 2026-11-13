@@ -226,7 +226,7 @@ def cmd_tokens(args):
                     for i, buf in enumerate(batches()):
                         # un lotto ogni `every` va nei dati di verifica (deterministico,
                         # così l'ordine dei file resta identico anche quando si riprende)
-                        is_val = i % every == every // 2
+                        is_val = i % every == min(every // 2, 3)
                         pending.append(pool.apply_async(_encode_batch, ((is_val, buf),)))
                         while len(pending) >= 4 * workers:
                             pending[0].wait()
