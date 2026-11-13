@@ -24,16 +24,16 @@ class ModelConfig:
     dropout: float = 0.0
 
 
-# Taglie pronte. I parametri indicati sono approssimativi (vocabolario 16k).
+# Taglie pronte. I parametri indicati sono approssimativi.
 PRESETS: dict[str, dict] = {
     # per provare che tutto funzioni, anche su CPU
     "tiny": dict(n_layer=4, n_head=4, n_embd=128, context_size=256),  # ~3M
     # addestrabile su una singola GPU consumer
-    "small": dict(n_layer=8, n_head=8, n_embd=512, context_size=1024),  # ~30M
+    "small": dict(n_layer=8, n_head=8, n_embd=512, context_size=1024),  # ~42M (vocabolario 32k)
     # taglia GPT-2 small: serve una GPU seria e molti dati
-    "base": dict(n_layer=12, n_head=12, n_embd=768, context_size=2048),  # ~100M
+    "base": dict(n_layer=12, n_head=12, n_embd=768, context_size=1024),  # ~110M (vocabolario 32k)
     # taglia GPT-2 medium: più GPU / giorni di training
-    "large": dict(n_layer=24, n_head=16, n_embd=1024, context_size=2048),  # ~320M
+    "large": dict(n_layer=24, n_head=16, n_embd=1024, context_size=1024),  # ~330M (vocabolario 32k)
 }
 
 

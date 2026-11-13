@@ -25,10 +25,25 @@ def encode_message(tok: Tokenizer, role: str, content: str) -> list[int]:
 
 def encode_conversation(tok: Tokenizer, messages: list[dict]) -> list[int]:
     """Conversazione completa -> ID (per i dati di addestramento)."""
+    return encode_conversation_with_mask(tok, messages)[0]
+
+
+def encode_conversation_with_mask(tok: Tokenizer, messages: list[dict]) -> tuple[list[int], list[int]]:
+    """Come encode_conversation, più una maschera: 1 sui token che il modello deve
+    imparare a scrivere (il testo delle risposte e il loro <|end|>), 0 altrove.
+
+    La maschera vale per il token da *prevedere*: in addestramento il token i
+    contribuisce alla loss solo se mask[i] == 1.
+    """
     ids = [tok.token_id("<|bos|>")]
+    mask = [0]
     for m in messages:
-        ids += encode_message(tok, m["role"], m["content"])
-    return ids
+        part = encode_message(tok, m["role"], m["content"])
+        ids += part
+        learn = 1 if m["role"] == "assistant" else 0
+        # il marcatore del ruolo si legge, il contenuto e la fine si imparano
+        mask += [0] + [learn] * (len(part) - 1)
+    return ids, mask
 
 
 def build_prompt(tok: Tokenizer, messages: list[dict], context_size: int, reserve: int = 256) -> list[int]:

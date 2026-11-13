@@ -20,7 +20,7 @@ import random
 
 import numpy as np
 
-from milo.chat_format import encode_conversation
+from milo.chat_format import encode_conversation_with_mask
 from milo.tokenizer import Tokenizer
 
 
@@ -44,7 +44,7 @@ def chat_documents(paths, tok):
                 if not line.strip():
                     continue
                 try:
-                    yield encode_conversation(tok, json.loads(line)["messages"])
+                    yield encode_conversation_with_mask(tok, json.loads(line)["messages"])
                 except (KeyError, ValueError, TypeError) as e:
                     raise SystemExit(f"{path}, riga {n}: conversazione non valida ({e})")
 
@@ -66,21 +66,26 @@ def main():
     rng = random.Random(args.seed)
     counts = {"train": 0, "val": 0}
     files = {name: open(os.path.join(args.out, f"{name}.bin"), "wb") for name in counts}
+    # Con le conversazioni si salva anche la maschera (<nome>.mask): la loss viene
+    # calcolata solo sulle risposte dell'assistente.
+    masks = {name: open(os.path.join(args.out, f"{name}.mask"), "wb") for name in counts} if args.chat else {}
 
-    def write(name, ids):
+    def write(name, ids, mask=None):
         np.asarray(ids, dtype=np.uint16).tofile(files[name])
+        if masks:
+            np.asarray(mask if mask is not None else [1] * len(ids), dtype=np.uint8).tofile(masks[name])
         counts[name] += len(ids)
 
     # Conversazioni: ognuna va per intero in train o in val.
-    for ids in chat_documents(args.chat, tok):
-        write("val" if rng.random() < args.val_fraction else "train", ids)
+    for ids, mask in chat_documents(args.chat, tok):
+        write("val" if rng.random() < args.val_fraction else "train", ids, mask)
     # Testo libero: la coda di ogni blocco va in val.
     for ids in text_documents(args.text, tok):
         cut = len(ids) - int(len(ids) * args.val_fraction)
         write("train", ids[:cut])
         write("val", ids[cut:])
 
-    for f in files.values():
+    for f in [*files.values(), *masks.values()]:
         f.close()
     if counts["val"] == 0:
         raise SystemExit("Dati di verifica vuoti: aggiungi dati o aumenta --val-fraction")
