@@ -2,6 +2,7 @@
 """API HTTP dell'assistente.
 
     python server.py --model out/chat-model/best.pt --port 3000
+    python server.py --open-model out/milo-aperto --port 3000     # Milo basato su un modello aperto
 
     POST /v1/chat   {"message": "..."}  oppure  {"messages": [{"role": "user", "content": "..."}]}
                     opzionali: "web" (default true), "stream", "temperature", "max_tokens"
@@ -18,7 +19,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from milo.assistant import Assistant
+from milo.assistant import Assistant, make_assistant
 
 NAME = os.environ.get("ASSISTANT_NAME", "Milo 1")
 API_KEY = os.environ.get("TICLY_API_KEY", "")
@@ -145,13 +146,16 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     global assistant
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", required=True)
+    p.add_argument("--model", help="modello addestrato da zero (file .pt)")
+    p.add_argument("--open-model", help="cartella dell'adattatore creato da finetune_open.py")
     p.add_argument("--tokenizer", default="out/tokenizer.json")
     p.add_argument("--host", default="127.0.0.1", help="usa 0.0.0.0 per esporlo in rete")
     p.add_argument("--port", type=int, default=int(os.environ.get("PORT", 3000)))
     args = p.parse_args()
 
-    assistant = Assistant(args.model, args.tokenizer)
+    if bool(args.model) == bool(args.open_model):
+        p.error("indica --model oppure --open-model")
+    assistant = make_assistant(args.model, args.open_model, args.tokenizer)
     if not API_KEY:
         print("Attenzione: TICLY_API_KEY non impostata, l'API è aperta a chiunque la raggiunga.")
     print(f"{NAME} in ascolto su http://{args.host}:{args.port} (device: {assistant.device})")

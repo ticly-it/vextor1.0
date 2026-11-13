@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Costruisce i dati di pre-addestramento: scarica testo italiano e lo trasforma in token.
+"""Costruisce i dati di pre-addestramento: scarica testo in italiano e in inglese e lo trasforma in token.
 
     # 1) campione per imparare il vocabolario
     python build_pretrain.py sample --out dati/campione.txt --mb 150
@@ -7,11 +7,15 @@
     # 2) tutto il dataset, già in token
     python build_pretrain.py tokens --tokenizer out/tokenizer.json --out out/pretrain --target-tokens 3e9
 
-Fonti (tutte su Hugging Face, in italiano):
-    wikipedia   wikimedia/wikipedia 20231101.it      enciclopedia, fino al 50% dei token
-    wikisource  wikimedia/wikisource 20231201.it     testi classici e documenti (es. Costituzione)
-    libri       manu/project_gutenberg, split "it"   libri di pubblico dominio
-    web         epfml/FineWeb2-HQ ita_Latn           pagine web di qualità alta, riempie il resto
+Fonti (tutte su Hugging Face). --en-share decide quanta parte dei token è in inglese (default 40%).
+  Italiano
+    wikipedia     wikimedia/wikipedia 20231101.it      enciclopedia, fino al 50% dell'italiano
+    wikisource    wikimedia/wikisource 20231201.it     testi classici e documenti (es. Costituzione)
+    libri         manu/project_gutenberg, split "it"   libri di pubblico dominio
+    web           epfml/FineWeb2-HQ ita_Latn           pagine web di qualità alta, riempie il resto
+  Inglese
+    wikipedia-en  wikimedia/wikipedia 20231101.en      enciclopedia, fino al 30% dell'inglese
+    web-en        HuggingFaceFW/fineweb-edu            pagine web educative, riempie il resto
 
 Il testo non viene salvato, solo i token (2 byte l'uno): 3 miliardi di token = 6 GB.
 Ogni file sorgente diventa un pezzo (train-<fonte>-<n>.bin + val-...); i pezzi finiti sono
@@ -53,13 +57,17 @@ def with_title(row: dict) -> str:
     return f"{row['title']}\n\n{row['text'].strip()}"
 
 
-# nome, cartella su HF, filtro sui file, colonne, funzione testo, quota massima dei token
+# nome, lingua, cartella su HF, filtro sui file, colonne, funzione testo,
+# quota massima dentro la propria lingua (None = riempie quello che resta)
 SOURCES = [
-    ("wikisource", "wikimedia/wikisource/20231201.it", "", ["title", "text"], with_title, 0.05),
-    ("libri", "manu/project_gutenberg/data", "it-", ["text"], lambda r: clean_gutenberg(r["text"]), 0.05),
-    ("wikipedia", "wikimedia/wikipedia/20231101.it", "", ["title", "text"], with_title, 0.50),
-    ("web", "epfml/FineWeb2-HQ/ita_Latn", "", ["text"], lambda r: r["text"].strip(), 1.00),
+    ("wikisource", "it", "wikimedia/wikisource/20231201.it", "", ["title", "text"], with_title, 0.05),
+    ("libri", "it", "manu/project_gutenberg/data", "it-", ["text"], lambda r: clean_gutenberg(r["text"]), 0.05),
+    ("wikipedia", "it", "wikimedia/wikipedia/20231101.it", "", ["title", "text"], with_title, 0.50),
+    ("web", "it", "epfml/FineWeb2-HQ/ita_Latn", "", ["text"], lambda r: r["text"].strip(), None),
+    ("wikipedia-en", "en", "wikimedia/wikipedia/20231101.en", "", ["title", "text"], with_title, 0.30),
+    ("web-en", "en", "HuggingFaceFW/fineweb-edu/sample/10BT", "", ["text"], lambda r: r["text"].strip(), None),
 ]
+LANG_OF = {name: lang for name, lang, *_ in SOURCES}
 MIN_CHARS = 200
 
 
@@ -102,12 +110,15 @@ def cmd_sample(args):
 
     fs = HfFileSystem()
     rng = random.Random(args.seed)
-    # quote del campione: stesse proporzioni circa del dataset finale
-    shares = {"wikisource": 0.05, "libri": 0.05, "wikipedia": 0.45, "web": 0.45}
+    lang_share = {"it": 1 - args.en_share, "en": args.en_share}
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as out:
-        for name, folder, prefix, cols, to_text, _ in SOURCES:
-            budget = int(args.mb * 1e6 * shares[name])
+        for name, lang, folder, prefix, cols, to_text, share in SOURCES:
+            if share is None:  # la fonte "web" di ogni lingua prende quello che resta
+                share = 1 - sum(x[6] for x in SOURCES if x[1] == lang and x[6] is not None)
+            budget = int(args.mb * 1e6 * lang_share[lang] * share)
+            if budget <= 0:
+                continue
             written = 0
             for path in spread(list_files(fs, folder, prefix), rng):
                 for text in iter_docs(fs, path, cols, to_text):
@@ -171,7 +182,9 @@ def cmd_tokens(args):
         os.replace(manifest_path + ".tmp", manifest_path)
 
     target = int(args.target_tokens)
-    if manifest.get("complete") == target:
+    lang_target = {"it": int(target * (1 - args.en_share)), "en": int(target * args.en_share)}
+    done_key = [target, args.en_share]
+    if manifest.get("complete") == done_key:
         print(f"Dati già pronti in {args.out} ({target / 1e9:.2f} miliardi di token)")
         return
     total = lambda: sum(s["train"] + s["val"] for s in manifest["shards"].values())  # noqa: E731
@@ -180,8 +193,11 @@ def cmd_tokens(args):
     workers = args.workers or os.cpu_count() or 1
     every = max(2, round(1 / args.val_fraction))
     with Pool(workers, initializer=_init_worker, initargs=(args.tokenizer,)) as pool:
-        for name, folder, prefix, cols, to_text, share in SOURCES:
-            cap = target if name == "web" else int(target * share)
+        for name, lang, folder, prefix, cols, to_text, share in SOURCES:
+            if lang_target[lang] <= 0:
+                continue
+            lang_tokens = lambda: sum(  # noqa: E731
+                s["train"] + s["val"] for s in manifest["shards"].values() if LANG_OF[s["source"]] == lang)
             files = spread(list_files(fs, folder, prefix), rng)
             if args.max_files:
                 files = files[: args.max_files]
@@ -191,7 +207,9 @@ def cmd_tokens(args):
                 key = path[len(HF):]
                 if key in manifest["shards"]:
                     continue
-                left = min(cap - src_tokens(), target - total())
+                left = lang_target[lang] - lang_tokens()
+                if share is not None:
+                    left = min(left, int(lang_target[lang] * share) - src_tokens())
                 if left <= 0:
                     break
                 n = len([s for s in manifest["shards"].values() if s["source"] == name])
@@ -246,7 +264,7 @@ def cmd_tokens(args):
                 print(f"   {done / 1e6:.0f}M token in {time.time() - t0:.0f}s  |  totale {total() / 1e9:.2f} miliardi", flush=True)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
-    manifest["complete"] = target
+    manifest["complete"] = done_key
     save_manifest()
     by_src = {}
     for s in manifest["shards"].values():
@@ -261,12 +279,14 @@ def main():
     s = sub.add_parser("sample", help="campione di testo per il tokenizer")
     s.add_argument("--out", required=True)
     s.add_argument("--mb", type=float, default=150)
+    s.add_argument("--en-share", type=float, default=0.4, help="parte del testo in inglese (0 = solo italiano)")
     s.add_argument("--seed", type=int, default=0)
 
     t = sub.add_parser("tokens", help="dataset completo in token")
     t.add_argument("--tokenizer", required=True)
     t.add_argument("--out", required=True)
     t.add_argument("--target-tokens", type=float, default=3e9)
+    t.add_argument("--en-share", type=float, default=0.4, help="parte dei token in inglese (0 = solo italiano)")
     t.add_argument("--val-fraction", type=float, default=0.005)
     t.add_argument("--tmp", help="cartella locale per i pezzi in lavorazione (es. su Colab /content/tmp)")
     t.add_argument("--workers", type=int, default=0, help="processi per la tokenizzazione (default: tutti i core)")

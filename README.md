@@ -1,11 +1,23 @@
 # Milo 1
 
-Milo 1 è l'assistente generale di Ticly: risponde alle domande e cerca informazioni sul web.
-È un modello linguistico **costruito da zero** (nessuna API di terzi): qui dentro ci sono
-il tokenizer, la rete neurale, gli script per addestrarla e quelli per usarla.
-Vextor resta l'AI per il codice.
+Milo 1 è l'assistente generale di Ticly: risponde alle domande, in italiano e in inglese,
+e cerca informazioni sul web. Vextor resta l'AI per il codice.
 
-Il modello non è ancora addestrato: questo repository è tutto ciò che serve per farlo.
+Ci sono due versioni, con lo stesso formato di chat, la stessa ricerca web e la stessa API:
+
+| | Milo 1 da zero | Milo 1 su modello aperto |
+|---|---|---|
+| Cos'è | Rete neurale scritta e addestrata interamente qui | Gemma 3 (modello aperto di Google) adattato con fine-tuning |
+| Parametri | ~110 milioni | 12 miliardi (4 su GPU piccole) |
+| Contesto | 2.048 token | 128.000 token |
+| Qualità | Livello GPT-2: italiano e inglese scorrevoli, molti errori | Assistente utilizzabile davvero |
+| Addestramento | ~50 ore di GPU, `notebooks/addestra_milo.ipynb` | Poche ore di GPU, `notebooks/milo_aperto.ipynb` |
+| Di chi è | Tutto di Ticly | La base è di Google (licenza Gemma), l'adattatore di Ticly |
+
+Nessuna delle due è paragonabile ai grandi modelli commerciali come Gemini: quelli hanno centinaia di
+volte più parametri e sono addestrati con migliaia di GPU per mesi.
+
+I modelli non sono nel repository: qui c'è tutto ciò che serve per addestrarli.
 
 ## Com'è fatto
 
@@ -16,10 +28,13 @@ Il modello non è ancora addestrato: questo repository è tutto ciò che serve p
 | `milo/chat_format.py` | Formato delle conversazioni (`<|user|>`, `<|assistant|>`, `<|context|>`) |
 | `milo/search.py` | Ricerca web (DuckDuckGo) e lettura del testo delle pagine |
 | `milo/assistant.py` | Mette insieme modello, tokenizer e ricerca |
-| `build_pretrain.py` | Scarica il testo italiano e lo trasforma in token (miliardi di token, riprendibile) |
+| `milo/open_model.py` | Milo basato su un modello aperto + adattatore LoRA |
+| `finetune_open.py` | Fine-tuning di un modello aperto per farlo diventare Milo 1 |
+| `build_pretrain.py` | Scarica testo italiano e inglese e lo trasforma in token (miliardi di token, riprendibile) |
 | `build_chat.py` | Scarica e prepara le conversazioni per il fine-tuning |
 | `train_tokenizer.py`, `prepare_data.py`, `train.py` | I tre passi dell'addestramento |
-| `notebooks/addestra_milo.ipynb` | Tutto l'addestramento, pronto per Colab e Kaggle |
+| `notebooks/addestra_milo.ipynb` | Addestramento da zero su Colab |
+| `notebooks/milo_aperto.ipynb` | Fine-tuning del modello aperto su Colab |
 | `chat.py`, `server.py` | Uso da terminale e API HTTP |
 
 ## Installazione
@@ -30,7 +45,24 @@ pip install -r requirements.txt
 
 Per addestrare sul serio serve una GPU NVIDIA; su CPU funziona solo la taglia `tiny` di prova.
 
-## Addestramento su Colab
+## Milo 1 su modello aperto (Colab)
+
+Apri `notebooks/milo_aperto.ipynb` su Colab, scegli una GPU (L4 o A100 per il modello da 12 miliardi di
+parametri; con la T4 usa da solo quello da 4 miliardi) e premi *Esegui tutto*. Il risultato è una cartella
+`adattatore` su Google Drive, da usare con `python chat.py --open-model adattatore` o
+`python server.py --open-model adattatore`. Quando gli chiedono su cosa è basato, Milo dice di essere
+basato su Gemma 3.
+
+A mano:
+
+```bash
+pip install transformers peft accelerate bitsandbytes datasets
+python build_chat.py --out dati/chat-aperto.jsonl --max-chat 800 --identity-copies 8 \
+    --base-model "Gemma 3" --base-maker Google
+python finetune_open.py --data dati/chat-aperto.jsonl --out out/milo-aperto
+```
+
+## Milo 1 da zero (Colab)
 
 Apri `notebooks/addestra_milo.ipynb` su [Google Colab](https://colab.research.google.com)
 (caricando il file con *File → Carica notebook*) e segui le istruzioni in cima. In breve:
@@ -39,24 +71,28 @@ Apri `notebooks/addestra_milo.ipynb` su [Google Colab](https://colab.research.go
 2. **Parte B, addestramento** (runtime T4 GPU): *Esegui tutto* di nuovo. Il pre-addestramento dura
    `PRETRAIN_HOURS` ore di GPU (48 di default), il fine-tuning 1-3 ore.
 
-Tutto viene salvato su Google Drive (`Milo1/`, servono circa 10 GB liberi). Le sessioni di Colab si
+Tutto viene salvato su Google Drive (`Milo1/`, servono circa 12 GB liberi). Le sessioni di Colab si
 chiudono dopo qualche ora: riapri il notebook e premi di nuovo *Esegui tutto*, riparte dall'ultimo salvataggio.
 
 ### Cosa impara
 
+Il 60% dei token è in italiano e il 40% in inglese (`EN_SHARE`).
+
 | Fonte (Hugging Face) | Cosa contiene | Quota |
 |---|---|---|
-| `wikimedia/wikipedia` 20231101.it | Tutta Wikipedia in italiano (1,8 milioni di voci) | fino al 50% |
+| `wikimedia/wikipedia` 20231101.it | Tutta Wikipedia in italiano (1,8 milioni di voci) | fino al 50% dell'italiano |
 | `wikimedia/wikisource` 20231201.it | Testi classici e documenti (es. la Costituzione) | fino al 5% |
 | `manu/project_gutenberg` split `it` | Circa 1.000 libri di pubblico dominio | fino al 5% |
-| `epfml/FineWeb2-HQ` ita_Latn | Pagine web italiane, il 10% di qualità più alta | il resto |
+| `epfml/FineWeb2-HQ` ita_Latn | Pagine web italiane, il 10% di qualità più alta | il resto dell'italiano |
+| `wikimedia/wikipedia` 20231101.en | Wikipedia in inglese | fino al 30% dell'inglese |
+| `HuggingFaceFW/fineweb-edu` | Pagine web educative in inglese | il resto dell'inglese |
 
-Con le impostazioni di default sono 2,5 miliardi di token. Per il fine-tuning: `FreedomIntelligence/alpaca-gpt4-italian`,
-`teelinsan/camoscio`, le conversazioni in italiano di `OpenAssistant/oasst2`, `crux82/squad_it`
-(trasformato in esempi di "rispondi usando queste pagine web", con pagine esca) e le conversazioni
-sull'identità di Milo 1 scritte in `build_chat.py`.
+Con le impostazioni di default sono 3 miliardi di token. Per il fine-tuning, in entrambe le lingue:
+Alpaca-GPT4, Camoscio, le conversazioni di `OpenAssistant/oasst2`, SQuAD e SQuAD-it (trasformati in
+esempi di "rispondi usando queste pagine web", con pagine esca) e le conversazioni sull'identità di
+Milo 1 scritte in `build_chat.py`.
 
-## Addestramento a mano
+## Addestramento da zero a mano
 
 L'addestramento ha due fasi: prima il modello impara la lingua da tanto testo
 (pre-addestramento), poi impara a fare l'assistente da conversazioni di esempio (fine-tuning).
@@ -66,12 +102,12 @@ L'addestramento ha due fasi: prima il modello impara la lingua da tanto testo
 python build_chat.py --out dati/chat.jsonl
 python build_pretrain.py sample --out dati/campione.txt --mb 150
 python train_tokenizer.py --input dati/campione.txt dati/chat.jsonl --vocab-size 32000 --max-chars 220000000
-python build_pretrain.py tokens --tokenizer out/tokenizer.json --out out/pretrain --target-tokens 2.5e9
+python build_pretrain.py tokens --tokenizer out/tokenizer.json --out out/pretrain --target-tokens 3e9
 python prepare_data.py --chat dati/chat.jsonl --out out/chat
 
 # 2. Pre-addestramento da zero, per un numero di ore (i passi si calcolano dalla velocità della GPU)
-python train.py --data out/pretrain --out out/pretrain-model --preset base --hours 48 \
-    --batch-size 8 --grad-accum 8 --lr 6e-4 --warmup 1000
+python train.py --data out/pretrain --out out/pretrain-model --preset base --context-size 2048 --hours 48 \
+    --batch-size 4 --grad-accum 16 --lr 6e-4 --warmup 1000
 
 # 3. Fine-tuning sulle conversazioni (la loss conta solo le risposte dell'assistente)
 python train.py --data out/chat --out out/chat-model \

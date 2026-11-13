@@ -1,2 +1,9 @@
 torch>=2.2
 numpy>=1.26
+# solo per scaricare i dati (build_chat.py, build_pretrain.py)
+datasets
+# solo per Milo su modello aperto (finetune_open.py, --open-model)
+transformers>=5
+peft
+accelerate
+bitsandbytes; sys_platform == "linux"

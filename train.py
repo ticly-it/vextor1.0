@@ -83,6 +83,7 @@ def main():
     p.add_argument("--out", required=True, help="cartella dove salvare il modello")
     p.add_argument("--tokenizer", default="out/tokenizer.json")
     p.add_argument("--preset", choices=PRESETS, default="small", help="taglia del modello (solo da zero)")
+    p.add_argument("--context-size", type=int, help="token di contesto (solo da zero; default: quello della taglia)")
     p.add_argument("--init-from", help="checkpoint da cui partire (fine-tuning)")
     p.add_argument("--resume", action="store_true", help="riprende da <out>/last.pt")
     durata = p.add_argument_group("durata (una sola; con --resume vale quella salvata)")
@@ -126,7 +127,10 @@ def main():
         model, _ = load_checkpoint(args.init_from, device)
         print(f"Parto dai pesi di {args.init_from}")
     else:
-        cfg = ModelConfig(vocab_size=tok.vocab_size, dropout=args.dropout, **PRESETS[args.preset])
+        preset = dict(PRESETS[args.preset])
+        if args.context_size:
+            preset["context_size"] = args.context_size
+        cfg = ModelConfig(vocab_size=tok.vocab_size, dropout=args.dropout, **preset)
         model = Milo(cfg).to(device)
     if model.cfg.vocab_size != tok.vocab_size:
         raise SystemExit("Il tokenizer non corrisponde a quello usato per questo modello")

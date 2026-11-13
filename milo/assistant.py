@@ -66,3 +66,12 @@ class Assistant:
         tail = decoder.decode(b"", final=True)
         if tail:
             yield tail
+
+
+def make_assistant(model_path: str | None, open_model: str | None, tokenizer_path: str = "out/tokenizer.json"):
+    """Milo addestrato da zero (file .pt) oppure basato su un modello aperto (cartella dell'adattatore)."""
+    if open_model:
+        from .open_model import OpenAssistant
+
+        return OpenAssistant(open_model)
+    return Assistant(model_path, tokenizer_path)

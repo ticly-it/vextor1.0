@@ -3,23 +3,27 @@
 
     python chat.py --model out/chat-model/best.pt
     python chat.py --model out/chat-model/best.pt --no-web     # senza ricerca web
+    python chat.py --open-model out/milo-aperto                # Milo basato su un modello aperto
 """
 
 import argparse
 
-from milo.assistant import Assistant
+from milo.assistant import make_assistant
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", required=True)
+    p.add_argument("--model", help="modello addestrato da zero (file .pt)")
+    p.add_argument("--open-model", help="cartella dell'adattatore creato da finetune_open.py")
     p.add_argument("--tokenizer", default="out/tokenizer.json")
     p.add_argument("--no-web", action="store_true", help="non cercare sul web")
     p.add_argument("--temperature", type=float, default=0.7)
     p.add_argument("--max-tokens", type=int, default=512)
     args = p.parse_args()
 
-    assistant = Assistant(args.model, args.tokenizer)
+    if bool(args.model) == bool(args.open_model):
+        p.error("indica --model oppure --open-model")
+    assistant = make_assistant(args.model, args.open_model, args.tokenizer)
     print("Scrivi una domanda (Ctrl+C per uscire, /nuova per ricominciare).")
     history: list[dict] = []
     while True:
