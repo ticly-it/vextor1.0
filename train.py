@@ -275,7 +275,10 @@ def main():
                     marker = "  (migliore, salvato)"
                 save(last_path)
                 t_save = time.time()
-                print(f"== passo {step}: val loss {v:.3f}{marker}\n   esempio: {sample_text()}", flush=True)
+                example = sample_text()
+                print(f"== passo {step}: val loss {v:.3f}{marker}", flush=True)
+                if example:
+                    print(f"   esempio: {example}", flush=True)
                 t_log = time.time()
             elif time.time() - t_save > args.save_every_min * 60:
                 save(last_path)
